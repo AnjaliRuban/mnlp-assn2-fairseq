@@ -214,6 +214,10 @@ class HubertConfig(FairseqDataclass):
     )
 
     checkpoint_activations: bool = field(
+        default=False, metadata={"help": "recompute activations and save memory for extra compute"}
+    )
+
+    checkpoint_activations: bool = field(
         default=False,
         metadata={"help": "recompute activations and save memory for extra compute"},
     )

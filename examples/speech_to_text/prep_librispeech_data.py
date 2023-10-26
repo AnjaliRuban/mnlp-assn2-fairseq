@@ -3,13 +3,12 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
 import argparse
+import os
 import logging
 from pathlib import Path
 import shutil
 from tempfile import NamedTemporaryFile
-
 import pandas as pd
 from examples.speech_to_text.data_utils import (
     create_zip,
@@ -19,25 +18,15 @@ from examples.speech_to_text.data_utils import (
     get_zip_manifest,
     save_df_to_tsv,
 )
-from torchaudio.datasets import LIBRISPEECH
+from torchaudio.datasets import COMMONVOICE
 from tqdm import tqdm
-
-
 log = logging.getLogger(__name__)
-
 SPLITS = [
-    "train-clean-100",
-    "train-clean-360",
-    "train-other-500",
-    "dev-clean",
-    "dev-other",
-    "test-clean",
-    "test-other",
+        "train",
+        "dev",
+        "test",
 ]
-
 MANIFEST_COLUMNS = ["id", "audio", "n_frames", "tgt_text", "speaker"]
-
-
 def process(args):
     out_root = Path(args.output_root).absolute()
     out_root.mkdir(exist_ok=True)
@@ -46,10 +35,12 @@ def process(args):
     feature_root.mkdir(exist_ok=True)
     for split in SPLITS:
         print(f"Fetching split {split}...")
-        dataset = LIBRISPEECH(out_root.as_posix(), url=split, download=True)
+        dataset = COMMONVOICE(out_root.as_posix(), tsv=split + ".tsv")
         print("Extracting log mel filter bank features...")
-        for wav, sample_rate, _, spk_id, chapter_no, utt_no in tqdm(dataset):
-            sample_id = f"{spk_id}-{chapter_no}-{utt_no}"
+        # for wav, sample_rate, _, spk_id, chapter_no, utt_no in tqdm(dataset):
+        for wav, sample_rate, dic in tqdm(dataset):
+            # sample_id = f"{spk_id}-{chapter_no}-{utt_no}"
+            sample_id = dic["path"]
             extract_fbank_features(
                 wav, sample_rate, feature_root / f"{sample_id}.npy"
             )
@@ -64,17 +55,25 @@ def process(args):
     train_text = []
     for split in SPLITS:
         manifest = {c: [] for c in MANIFEST_COLUMNS}
-        dataset = LIBRISPEECH(out_root.as_posix(), url=split)
-        for _, _, utt, spk_id, chapter_no, utt_no in tqdm(dataset):
-            sample_id = f"{spk_id}-{chapter_no}-{utt_no}"
-            manifest["id"].append(sample_id)
+        dataset = COMMONVOICE(out_root.as_posix(), tsv=split + ".tsv")
+        # for _, _, utt, spk_id, chapter_no, utt_no in tqdm(dataset):
+        i = 0
+        for wav, sample_rate, dic in tqdm(dataset):
+            # sample_id = f"{spk_id}-{chapter_no}-{utt_no}"
+            sample_id = dic["path"]
+            # manifest["id"].append(os.path.splitext(sample_id)[0])
+            manifest["id"].append(str(i))
+            i+=1
             manifest["audio"].append(audio_paths[sample_id])
             manifest["n_frames"].append(audio_lengths[sample_id])
-            manifest["tgt_text"].append(utt.lower())
-            manifest["speaker"].append(spk_id)
+            # manifest["tgt_text"].append(utt.lower())
+            manifest["tgt_text"].append(dic["sentence"].lower())
+            # manifest["speaker"].append(spk_id)
+            manifest["speaker"].append(dic["client_id"][:10])
         save_df_to_tsv(
-            pd.DataFrame.from_dict(manifest), out_root / f"{split}.tsv"
+            pd.DataFrame.from_dict(manifest), out_root / f"{split}_manifest.tsv"
         )
+        # if split.startswith("train"):
         if split.startswith("train"):
             train_text.extend(manifest["tgt_text"])
     # Generate vocab
@@ -97,8 +96,6 @@ def process(args):
     )
     # Clean up
     shutil.rmtree(feature_root)
-
-
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--output-root", "-o", required=True, type=str)
@@ -111,9 +108,6 @@ def main():
     ),
     parser.add_argument("--vocab-size", default=10000, type=int)
     args = parser.parse_args()
-
     process(args)
-
-
 if __name__ == "__main__":
     main()

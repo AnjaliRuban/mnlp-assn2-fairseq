@@ -58,6 +58,7 @@ class SpeechToTextTask(LegacyFairseqTask):
         super().__init__(args)
         self.tgt_dict = tgt_dict
         self.data_cfg = S2TDataConfig(Path(args.data) / args.config_yaml)
+        print(self.data_cfg.input_feat_per_channel)
         self.speaker_to_id = self._get_speaker_to_id()
         if (
             self.data_cfg.prepend_tgt_lang_tag
